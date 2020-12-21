@@ -10,7 +10,11 @@ class LambdaDeploy:
         self.params = params
         self.basepath = Path(os.getcwd()) / self.params['location']
         self.abspath = os.path.abspath(self.basepath)
+        if sys.platform == "win32":
+            self.abspath= self.abspath.replace('\\','/')
         self.util = Util(self.basepath,self.abspath)
+
+        
         self.rc = self.util.get_rc(params['config'])
     def main(self):
         if self.params['action']=='init':
@@ -72,7 +76,7 @@ class LambdaDeploy:
         handler = self.rc['Handler']
         handler = handler.split('.')
         if self.rc['Runtime'].lower().startswith('node'):
-            os.system("node -e 'require(\"{path}/{filename}\").{functionName}({event},{{}})'".format(path=self.abspath,filename=handler[0],functionName=handler[1],event=event))
+            os.system("node -e \"require(\'{path}/{filename}\').{functionName}({event},{{}})\"".format(path=self.abspath,filename=handler[0],functionName=handler[1],event=event))
         else:
             os.system("python -c 'import sys; sys.path.append(\"{path}\"); import {filename}; {filename}.{functionName}({event},{{}})'".format(path=self.abspath,filename=handler[0],functionName=handler[1],event=event))
 
