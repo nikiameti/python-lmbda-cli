@@ -77,7 +77,6 @@ class LambdaDeploy:
         handler = handler.split('.')
         if self.rc['Runtime'].lower().startswith('node'):
             str = "node -e \"require(\'{path}/{filename}\').{functionName}({event},{{}})\"".format(path=self.abspath,filename=handler[0],functionName=handler[1],event=event)
-            print(str)
             os.system(str)
         else:
             os.system("python -c \"import sys; sys.path.append(\'{path}\'); import {filename}; {filename}.{functionName}({event},{{}})\"".format(path=self.abspath,filename=handler[0],functionName=handler[1],event=event))
