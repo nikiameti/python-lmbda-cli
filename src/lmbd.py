@@ -76,9 +76,11 @@ class LambdaDeploy:
         handler = self.rc['Handler']
         handler = handler.split('.')
         if self.rc['Runtime'].lower().startswith('node'):
-            os.system("node -e \"require(\'{path}/{filename}\').{functionName}({event},{{}})\"".format(path=self.abspath,filename=handler[0],functionName=handler[1],event=event))
+            str = "node -e \"require(\'{path}/{filename}\').{functionName}({event},{{}})\"".format(path=self.abspath,filename=handler[0],functionName=handler[1],event=event)
+            print(str)
+            os.system(str)
         else:
-            os.system("python -c 'import sys; sys.path.append(\"{path}\"); import {filename}; {filename}.{functionName}({event},{{}})'".format(path=self.abspath,filename=handler[0],functionName=handler[1],event=event))
+            os.system("python -c \"import sys; sys.path.append(\'{path}\'); import {filename}; {filename}.{functionName}({event},{{}})\"".format(path=self.abspath,filename=handler[0],functionName=handler[1],event=event))
 
 def parseArgs():
     parser = argparse.ArgumentParser(description='Script for running and deploying Aws Lambda Functions')
