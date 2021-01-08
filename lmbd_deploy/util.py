@@ -18,6 +18,11 @@ class Util:
             "Environment":{
                 "DATABASE_URL":"TEST",
             },
+            "VpcConfig": {
+                "SubnetIds": [],
+                "SecurityGroupIds": [],
+                "VpcId": ""
+            },
             "LambdaIgnores":["*.DS_Store*", "script.sh","script.py","lambda_function.pyc",'.lmbdrc']
         }
     def get_rc(self,path):

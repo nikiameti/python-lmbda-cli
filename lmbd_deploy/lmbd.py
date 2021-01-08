@@ -5,6 +5,10 @@ from pathlib import Path
 import argparse
 from .util import Util
 from pprint import pprint
+import boto3
+import zipfile
+import botocore
+
 class LambdaDeploy:
     def __init__(self,params):
         self.params = params
@@ -13,9 +17,15 @@ class LambdaDeploy:
         if sys.platform == "win32":
             self.abspath= self.abspath.replace('\\','/')
         self.util = Util(self.basepath,self.abspath)
-
         
         self.rc = self.util.get_rc(params['config'])
+        if self.rc != None:
+            if self.rc["AwsAccessKey"]!="" and self.rc["AwsSecretKey"]!="":
+                self.lambdaClient = boto3.client('lambda',aws_access_key_id=self.rc["AwsAccessKey"], aws_secret_access_key=self.rc["AwsSecretKey"])
+            else:
+                self.lambdaClient = boto3.client('lambda')
+        else:
+            self.lambdaClient = boto3.client('lambda')
     def main(self):
         if self.params['action']=='init':
             self.init()
@@ -46,29 +56,85 @@ class LambdaDeploy:
             os.remove('{}/archive.zip'.format(self.abspath))
         except FileNotFoundError:
             pass
-        finally:
-            print("Clean Completed")
         
 
     def build(self):
-        excludes = ""
-        for x in self.rc["LambdaIgnores"]:
-            excludes+="--exclude=" + x + " "
-        os.system('zip -j -r9 {path}/archive.zip {path} {excludes}'.format(path=self.basepath, excludes=excludes))
+        zipf = zipfile.ZipFile(self.abspath + '/archive.zip', 'w', zipfile.ZIP_DEFLATED)
+        for root, dirs, files in os.walk(self.abspath):
+            for file in files:
+                absname = os.path.join(root, file)
+                arcname = absname[len(self.abspath) + 1:]
+                if(file not in self.rc["LambdaIgnores"] and not file.lower().endswith(".pyc")):
+                    zipf.write(absname, arcname)
 
     def deploy(self):
-        env='Variables={'
-        for k,v in self.rc["Environment"].items():
-            env+=k + '=' + v + ','
-        env = env[:-1]
-        env +='}'
-        res = os.system('aws lambda update-function-code --function-name {} --zip-file fileb://{}/archive.zip'.format(self.rc["FunctionName"],self.abspath))
-        if res!=0:
-            os.system('aws lambda create-function --function-name {} --memory-size {} --description "{}" --runtime {} --role {} --handler {} --zip-file fileb://{}/archive.zip --environment "{}"'.format(self.rc["FunctionName"],self.rc["Memory"],self.rc["Description"],self.rc["Runtime"],self.rc["Role"],self.rc["Handler"],self.abspath,env))
-        os.system('aws lambda update-function-configuration --function-name {} --memory-size {} --description "{}" --environment "{}"'.format(self.rc["FunctionName"],self.rc["Memory"],self.rc["Description"],env))
+        self.update_lambda_function()
+    def create_lambda_function(self):
+        try:
+            with open(self.abspath + "/archive.zip", 'rb') as file_data:
+                archive = file_data.read()
+            vpc = {}
+            if self.rc["VpcConfig"]["VpcId"]:
+                vpc = self.rc["VpcConfig"]
+            response = self.lambdaClient.create_function(
+                FunctionName=self.rc["FunctionName"],
+                Runtime=self.rc["Runtime"],
+                Role=self.rc["Role"],
+                Handler=self.rc["Handler"],
+                Code={
+                    'ZipFile': archive},
+                Description=self.rc["Description"],
+                Timeout=self.rc["Timeout"],
+                MemorySize=self.rc["Memory"],
+                Publish=True,
+                Environment={
+                    'Variables': self.rc["Environment"]
+                },
+                VpcConfig=vpc
+            )
+        except Exception as e:
+            print(e)
+    def update_lambda_function(self):
+        try:
+            with open(self.abspath + "/archive.zip", 'rb') as file_data:
+                archive = file_data.read()
+            response = self.lambdaClient.update_function_code(
+                FunctionName=self.rc["FunctionName"],
+                ZipFile=archive
+            )
+
+            vpc = {}
+            if self.rc["VpcConfig"]["VpcId"]:
+                vpc = self.rc["VpcConfig"]
+            response = self.lambdaClient.update_function_configuration(
+                FunctionName=self.rc["FunctionName"],
+                Runtime=self.rc["Runtime"],
+                Role=self.rc["Role"],
+                Handler=self.rc["Handler"],
+                Description=self.rc["Description"],
+                Timeout=self.rc["Timeout"],
+                MemorySize=self.rc["Memory"],
+                Environment={
+                    'Variables': self.rc["Environment"]
+                },
+                VpcConfig=vpc
+            )
+            pprint(response)
+        except Exception as e:
+            if e.response["Error"]["Code"] == "ResourceNotFoundException":
+                response = self.create_lambda_function()
+                pprint(response)
+            else:
+                raise e
     def delete(self):
-        #os.system('aws lambda delete-function --function-name "{}"'.format(self.rc["FunctionName"]))
-        pass
+        try:
+            response = self.lambdaClient.delete_function(
+                FunctionName=self.rc["FunctionName"]
+            )
+            pprint(response)
+        except Exception as e:
+            pprint(e)
+            pass
     def run_local(self):
         event = self.util.get_event(self.params["event"])
         if event == None:

@@ -10,3 +10,4 @@
 
 # Usage
 `lmbd init`
+![Screenshot](lmbd.png)
